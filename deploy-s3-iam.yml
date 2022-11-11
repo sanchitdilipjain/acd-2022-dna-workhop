@@ -1,0 +1,121 @@
+AWSTemplateFormatVersion: 2010-09-09
+Outputs:
+  DMSLabRoleS3:
+    Description: The DMS serivce role
+    Value: !GetAtt DMSLabRoleS3.Arn
+  GlueLabRole:
+    Description: The Glue service role
+    Value: !Ref GlueLabRole
+  BucketName:
+    Description: S3 Bucket that was created
+    Value: !Ref DMSLabS3Bucket
+
+Parameters:
+  DMSCWRoleCreated:
+    Description: dms-cloudwatch-logs-role already created in account?
+    Default: no
+    Type: String
+    AllowedValues:
+      - no
+      - yes
+    ConstraintDescription: must specify 'yes' or 'no'.
+Conditions:
+  DMSCWRoleExist:
+    Fn::Equals:
+      - !Ref DMSCWRoleCreated
+      - no
+Resources:
+  DMSLabS3Bucket:
+    Type: AWS::S3::Bucket
+  DMSLabS3Policy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: DMSLabS3Policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource:
+              - !Sub ${DMSLabS3Bucket.Arn}/*
+          -
+            Effect: Allow
+            Action:
+              - s3:ListBucket
+            Resource:
+              - !GetAtt DMSLabS3Bucket.Arn
+      Roles:
+        - !Ref DMSLabRoleS3
+        - !Ref GlueLabRole
+  DMSLabRoleS3:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - dms.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+  GlueLabRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - glue.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /service-role/
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
+        - arn:aws:iam::aws:policy/AmazonKinesisFullAccess
+      Policies:
+        -
+          PolicyName: DEBucketAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              -
+                Sid: ListDEBucket
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: arn:aws:s3:::aws-dataengineering-day.workshop.aws
+              -
+                Sid: GetObjectFromDEBucket
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: arn:aws:s3:::aws-dataengineering-day.workshop.aws/*  
+  DMSCloudWatchLogRole:
+    Type: AWS::IAM::Role
+    Condition: DMSCWRoleExist
+    Properties:
+      RoleName: dms-cloudwatch-logs-role
+      Description: Do not create the role to avoid duplication error, if it exists already
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - dms.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonDMSCloudWatchLogsRole
